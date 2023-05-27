@@ -3,6 +3,10 @@ const express = require("express")
 const cors = require("cors")
 const bcrypt = require("bcryptjs")
 const saltRounds = 10
+require('dotenv').config();
+const jwt = require('jsonwebtoken');
+const { promisify } = require('util');
+const revokedTokens = new Set(); // Store revoked tokens
 
 const app = express()
 app.use(cors())
@@ -22,13 +26,14 @@ async function run() {
 
         app.post('/users', async (req, res) => {
             const query = req.body;
-            const inserted = await allUsers.findOne({ userName: query.userName })
+            const inserted = await allUsers.findOne({ userName: query.name })
             if (inserted) {
                 return res.send({ message: 'Previously Added' })
             }
             bcrypt.hash(req.body.password, saltRounds, async function (err, hash) {
                 const newUser = {
-                    userName: req.body.userName,
+                    userName: req.body.name,
+                    email: req.body.email,
                     password: hash
                 }
                 const result = await allUsers.insertOne(newUser);
@@ -38,21 +43,70 @@ async function run() {
 
 
         app.post('/login', async (req, res) => {
-            const query = req.body;
-            const userPassword = query.password;
-            const user = await allUsers.findOne({ userName: query.userName })
-            const password = user.password;
-            bcrypt.compare(userPassword, password, function (err, result) {
-                if (result) {
-                    console.log('valid')
+
+            try {
+                const { email, password } = req.body;
+                const user = await allUsers.findOne({ email: email })
+                if (!user) {
+                    return res.status(401).json({ error: 'Invalid credentials' });
                 }
-                else {
-                    console.log('not valid');
+                const isPasswordValid = await bcrypt.compare(password, user.password);
+                if (!isPasswordValid) {
+                    return res.status(401).json({ error: 'Invalid credentials' });
                 }
-                res.send(result)
-            });
+                const token = jwt.sign({ email }, process.env.ACCESS_TOKEN);
+                return res.send({ accessToken: token, user })
+            } catch (error) {
+                res.status(500).json({ error: 'Failed to login' });
+            }
+
+
+            // const query = req.body;
+            // const userPassword = query.password;
+            // const user = await allUsers.findOne({ email: query.email })
+            // const password = user.password;
+            // bcrypt.compare(userPassword, password, function (err, result) {
+            //     if (result) {
+            //         console.log('valid')
+            //     }
+            //     else {
+            //         console.log('not valid');
+            //         res.status(403).send({ accessToken: '' })
+            //     }
+            //     res.send(result)
+            // });
 
         })
+
+        app.post('/getMe', async (req, res) => {
+            const token = req.headers?.authorization?.split(" ")?.[1];
+            const decode = await promisify(jwt.verify)(token, process.env.ACCESS_TOKEN);
+            // console.log(decode);
+            res.json(decode.email);
+        })
+
+
+        // app.post('/logOut', async (req, res) => {
+        //     const token = req.headers?.authorization?.split(' ')[1];
+        //     if (token) {
+        //         revokedTokens.add(token); // Add the token to the revoked tokens list
+        //         res.json({ message: 'User logged out successfully' });
+        //     } else {
+        //         res.status(401).json({ error: 'Missing token' });
+        //     }
+        // })
+
+        // app.get('/jwt', async (req, res) => {
+        //     const email = req.query.email;
+        //     const query = { email: email }
+        //     const user = await allUsers.findOne(query);
+        //     if (user) {
+        //         const token = jwt.sign({ email }, process.env.ACCESS_TOKEN) //, {expiresIn: '1h'}
+        //         // console.log(token);
+        //         return res.send({ accessToken: token })
+        //     }
+        //     res.status(403).send({ accessToken: '' })
+        // })
 
 
         app.get('/users/:username', async (req, res) => {
