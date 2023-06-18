@@ -142,6 +142,18 @@ async function run() {
             console.log(result)
         })
 
+
+        // app.get('/allData', async (req, res) => {
+        //     const {data} = req.query;
+        //     const regex = new RegExp(data, 'i');
+        //     const result = await allData.find({description: regex}).limit(2).toArray();
+        //     // res.status(100).json({
+        //     //     status: "Successfully",
+        //     //     data: result
+        //     // })
+        //     res.send(result)
+        // })
+
     }
     finally {
 
